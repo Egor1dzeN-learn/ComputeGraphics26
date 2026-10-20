@@ -1,0 +1,8 @@
+# Сборка
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+.vs/
+.vscode/
