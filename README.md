@@ -129,3 +129,4 @@ build\Release\itk_vtk.exe data\ct
 | программа не стартует, `vtk*.dll не найден` | пересоберите проект (DLL копируются после сборки) или добавьте `D:\CompGraph\libs\vtk-build\bin\Release` в `PATH` |
 | `... is not a directory`, `No DICOM series` | неверный путь к данным; запускайте из папки лабораторной или укажите полный путь |
 | `no override found for 'vtk...'` | в `CMakeLists.txt` нет `vtk_module_autoinit` |
+| `Invalid character escape '\C'` в `ITKVtkGlue.cmake` | ITK сконфигурирован с `-DVTK_DIR=D:\...`; пути в `-D` пишите через `/`, затем переконфигурируйте ITK |
