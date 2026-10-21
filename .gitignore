@@ -1,5 +1,6 @@
 # Сборка
 build/
+/libs/
 cmake-build-*/
 
 # IDE

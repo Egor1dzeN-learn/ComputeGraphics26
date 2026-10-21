@@ -11,6 +11,9 @@
 ```
 CompGraph/
 ├── README.md                 ← этот файл: окружение и сборка библиотек
+├── setup_libs.bat            ← сборка VTK, ITK и примеров VTK одной командой
+├── run_lab1.bat              ← сборка и запуск лабораторной 1
+├── run_vtk_example.bat       ← запуск примеров VTK_tutorial
 └── lab_1_itk+vtk/
     ├── README.md             ← описание лабораторной, запуск, результаты
     ├── CMakeLists.txt
@@ -43,6 +46,18 @@ D:\CompGraph\libs\
 ├── itk-src\  itk-build\      ITK 5.4.0 (с модулем ITKVtkGlue)
 └── VTK_tutorial\             примеры FenixFly для проверки VTK
 ```
+
+### Автоматически: `setup_libs.bat`
+
+Скрипт выполняет все шаги ниже (клонирование, правка примеров под VTK 9, сборка VTK, ITK и примеров). Нужны `git` и `cmake` в `PATH`; CMake из Visual Studio подключается так:
+
+```powershell
+$env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;$env:PATH"
+.\setup_libs.bat                 # в D:\CompGraph\libs
+.\setup_libs.bat C:\CG\libs      # в другую папку (без кириллицы и пробелов)
+```
+
+Если диска `D:` нет, удобно собирать в папку `libs` внутри репозитория: `.\setup_libs.bat <путь_к_репозиторию>\libs`. Батники `run_*.bat` ищут библиотеки сначала там, затем в `D:\CompGraph\libs`. Папка `libs` внесена в `.gitignore`.
 
 ### 1. VTK 9.3.1 (~30–40 мин)
 
@@ -79,6 +94,16 @@ D:\CompGraph\libs\VTK_tutorial\build\Release\VolumeRender.exe D:\CompGraph\libs\
 
 Должно открыться окно с объёмным рендерингом головы. Всего собирается 21 пример.
 
+То же самое через батник (он сам добавляет DLL VTK в `PATH` и подставляет данные из `VTK_tutorial\data`):
+
+```powershell
+.\run_vtk_example.bat                                  # VolumeRender с head.vti, проверка из README
+.\run_vtk_example.bat list                             # список собранных примеров
+.\run_vtk_example.bat ContourFilter                    # другой пример, данные head.vti
+.\run_vtk_example.bat ObjReader                        # модель сердца Heart.obj
+.\run_vtk_example.bat VolumeRender C:\data\my.vti      # свой файл данных
+```
+
 ![VTK VolumeRender](lab_1_itk+vtk/screenshots/vtk_tutorial_volumerender.png)
 
 ### 3. ITK 5.4.0 с модулем ITKVtkGlue (~30 мин)
@@ -96,6 +121,21 @@ ITK собирается статически, поэтому при запус�
 > Папки `*-build` нельзя перемещать: CMake прописывает в них абсолютные пути. Если библиотеки нужны в другом месте, их придётся пересобрать.
 
 ## Сборка и запуск лабораторной
+
+### Батником `run_lab1.bat`
+
+Собирает лабораторную (при первом запуске ещё и конфигурирует, дальше пересобирает только изменённое, в Release) и запускает её на `data\ct`. Аргументы те же, что у `itk_vtk.exe` после папки с данными: `[стадия 0..4] [порог_кости_HU]`.
+
+```powershell
+.\run_lab1.bat           # стадия 4: скелет (крупнейший объект)
+.\run_lab1.bat 0         # исходные данные, объёмный рендеринг
+.\run_lab1.bat 1         # после медианного фильтра
+.\run_lab1.bat 2         # маска кости, порог 200 HU
+.\run_lab1.bat 2 400     # маска кости с порогом 400 HU (только плотная кость)
+.\run_lab1.bat 3         # после морфологического закрытия
+```
+
+Можно запускать и двойным кликом (стадия 4). Если `cmake` нет в `PATH`, батник берёт CMake из Visual Studio. Если `LIBS_DIR` нужно сменить, удалите `lab_1_itk+vtk\build`, чтобы проект переконфигурировался.
 
 ### Из консоли
 
