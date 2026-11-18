@@ -81,12 +81,21 @@ MaskImage::Pointer MakeRibMask(const MaskImage* bones)
     }
   }
 
-  // Удаляем мелкие островки, сохраняя отдельные рёбра.
+  // Сначала соединяем небольшие разрывы, затем удаляем отдельные островки.
+  using RibBall = itk::BinaryBallStructuringElement<unsigned char, 3>;
+  RibBall ribBall;
+  ribBall.SetRadius(2);
+  ribBall.CreateStructuringElement();
+  auto repair = itk::BinaryMorphologicalClosingImageFilter<MaskImage, MaskImage, RibBall>::New();
+  repair->SetInput(ribs);
+  repair->SetKernel(ribBall);
+  repair->SetForegroundValue(1);
+
   auto cleanup = itk::BinaryShapeOpeningImageFilter<MaskImage>::New();
-  cleanup->SetInput(ribs);
+  cleanup->SetInput(repair->GetOutput());
   cleanup->SetForegroundValue(1);
   cleanup->SetAttribute("NumberOfPixels");
-  cleanup->SetLambda(150);
+  cleanup->SetLambda(400);
   cleanup->Update();
   MaskImage::Pointer result = cleanup->GetOutput();
   result->DisconnectPipeline();
