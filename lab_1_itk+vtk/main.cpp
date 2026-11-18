@@ -30,9 +30,9 @@
 #include <string>
 
 using CTImage = itk::Image<short, 3>;           // значения в единицах Хаунсфилда (HU)
-using MaskImage = itk::Image<unsigned char, 3>; // бинарная маска 0/1
+using MaskImage = itk::Image<unsigned char, 3>;
 
-// Перенос изображения из ITK в VTK (копия, чтобы не зависеть от времени жизни коннектора).
+// DeepCopy: выход коннектора живёт, только пока жив сам коннектор.
 template <class TImage>
 vtkSmartPointer<vtkImageData> ToVtk(TImage* image)
 {
@@ -75,7 +75,6 @@ vtkSmartPointer<vtkVolume> MakeVolume(vtkImageData* data)
   return volume;
 }
 
-// Поверхность бинарной маски (изоповерхность на уровне 0.5).
 vtkSmartPointer<vtkActor> MakeSurface(vtkImageData* mask)
 {
   auto surface = vtkSmartPointer<vtkFlyingEdges3D>::New();
@@ -103,7 +102,6 @@ int main(int argc, char* argv[])
   const int stage = argc > 2 ? std::stoi(argv[2]) : 4;
   const short boneThreshold = static_cast<short>(argc > 3 ? std::stoi(argv[3]) : 200);
 
-  // --- ITK: чтение DICOM-серии в 3D-изображение ---
   auto names = itk::GDCMSeriesFileNames::New();
   names->SetDirectory(argv[1]);
   const auto& seriesUIDs = names->GetSeriesUIDs();
@@ -117,7 +115,7 @@ int main(int argc, char* argv[])
   reader->SetImageIO(itk::GDCMImageIO::New());
   reader->SetFileNames(names->GetFileNames(seriesUIDs.front()));
 
-  // --- ITK: фильтры (каждая стадия продолжает предыдущую) ---
+  // Каждая стадия обрабатывает результат предыдущей.
   // 1. Медианный фильтр 3x3x3: убирает шум, сохраняя границы.
   auto median = itk::MedianImageFilter<CTImage, CTImage>::New();
   median->SetInput(reader->GetOutput());
@@ -156,7 +154,6 @@ int main(int argc, char* argv[])
     return EXIT_FAILURE;
   }
 
-  // --- ITK -> VTK ---
   auto renderer = vtkSmartPointer<vtkRenderer>::New();
   try
   {
@@ -185,7 +182,6 @@ int main(int argc, char* argv[])
   std::cout << "Volume: " << size[0] << "x" << size[1] << "x" << size[2] << ", stage " << stageNames[stage]
             << "\n";
 
-  // --- VTK: окно с интерактивным вращением (ЛКМ - вращать, колесо - масштаб) ---
   auto text = vtkSmartPointer<vtkTextActor>::New();
   text->SetInput(stageNames[stage]);
   text->SetPosition(10, 10);
