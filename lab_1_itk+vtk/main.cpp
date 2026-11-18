@@ -1,12 +1,14 @@
 // ITK: чтение DICOM-серии и обработка фильтрами -> VTK: 3D-визуализация.
-// Запуск: itk_vtk <папка_DICOM> [стадия 0..4] [порог_кости_HU]
+// Запуск: itk_vtk <папка_DICOM> [стадия 0..5] [порог_кости_HU]
 #include <itkBinaryBallStructuringElement.h>
 #include <itkBinaryMorphologicalClosingImageFilter.h>
 #include <itkBinaryShapeKeepNObjectsImageFilter.h>
+#include <itkBinaryShapeOpeningImageFilter.h>
 #include <itkBinaryThresholdImageFilter.h>
 #include <itkGDCMImageIO.h>
 #include <itkGDCMSeriesFileNames.h>
 #include <itkImageSeriesReader.h>
+#include <itkImageRegionIterator.h>
 #include <itkImageToVTKImageFilter.h>
 #include <itkMedianImageFilter.h>
 
@@ -26,11 +28,70 @@
 #include <vtkVolume.h>
 #include <vtkVolumeProperty.h>
 
+#include <cmath>
 #include <iostream>
+#include <iterator>
 #include <string>
 
 using CTImage = itk::Image<short, 3>;           // значения в единицах Хаунсфилда (HU)
 using MaskImage = itk::Image<unsigned char, 3>;
+
+constexpr char RibSeriesUID[] = "1.3.6.1.4.1.14519.5.2.1.6279.6001.179049373636438705059720603192";
+
+// Полигон боковой стенки грудной клетки на аксиальных срезах этой серии.
+// x — расстояние в пикселях от середины снимка, y — строка снимка.
+bool IsInRibRegion(double x, double y)
+{
+  constexpr double outline[][2] = {
+    {22, 96}, {85, 98}, {148, 124}, {185, 174}, {215, 248},
+    {211, 306}, {162, 366}, {90, 399}, {39, 415}, {33, 356},
+    {96, 340}, {138, 307}, {143, 247}, {136, 197}, {107, 157}, {22, 139}
+  };
+  bool inside = false;
+  for (std::size_t i = 0, j = std::size(outline) - 1; i < std::size(outline); j = i++)
+  {
+    const auto& a = outline[i];
+    const auto& b = outline[j];
+    if ((a[1] > y) != (b[1] > y) && x < a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]))
+    {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+MaskImage::Pointer MakeRibMask(const MaskImage* bones)
+{
+  const auto region = bones->GetLargestPossibleRegion();
+  auto ribs = MaskImage::New();
+  ribs->CopyInformation(bones);
+  ribs->SetRegions(region);
+  ribs->Allocate();
+  ribs->FillBuffer(0);
+
+  itk::ImageRegionIterator<MaskImage> voxel(ribs, region);
+  for (; !voxel.IsAtEnd(); ++voxel)
+  {
+    const auto index = voxel.GetIndex();
+    const auto offset = index - region.GetIndex();
+    if (offset[2] >= 10 && offset[2] <= 117 && bones->GetPixel(index) != 0 &&
+        IsInRibRegion(std::abs(offset[0] - 252.0), offset[1]))
+    {
+      voxel.Set(1);
+    }
+  }
+
+  // Удаляем мелкие островки, сохраняя отдельные рёбра.
+  auto cleanup = itk::BinaryShapeOpeningImageFilter<MaskImage>::New();
+  cleanup->SetInput(ribs);
+  cleanup->SetForegroundValue(1);
+  cleanup->SetAttribute("NumberOfPixels");
+  cleanup->SetLambda(150);
+  cleanup->Update();
+  MaskImage::Pointer result = cleanup->GetOutput();
+  result->DisconnectPipeline();
+  return result;
+}
 
 // DeepCopy: выход коннектора живёт, только пока жив сам коннектор.
 template <class TImage>
@@ -95,11 +156,10 @@ int main(int argc, char* argv[])
 {
   if (argc < 2)
   {
-    std::cerr << "Usage: " << argv[0] << " <dicom_dir> [stage 0..4] [bone_threshold_HU=200]\n"
-              << "  0 - original, 1 - median, 2 - threshold, 3 - closing, 4 - largest object\n";
+    std::cerr << "Usage: " << argv[0] << " <dicom_dir> [stage 0..5] [bone_threshold_HU=200]\n"
+              << "  0 - original, 1 - median, 2 - threshold, 3 - closing, 4 - largest object, 5 - ribs\n";
     return EXIT_FAILURE;
   }
-  const int stage = argc > 2 ? std::stoi(argv[2]) : 4;
   const short boneThreshold = static_cast<short>(argc > 3 ? std::stoi(argv[3]) : 200);
 
   auto names = itk::GDCMSeriesFileNames::New();
@@ -108,6 +168,13 @@ int main(int argc, char* argv[])
   if (seriesUIDs.empty())
   {
     std::cerr << "No DICOM series in " << argv[1] << "\n";
+    return EXIT_FAILURE;
+  }
+  const bool isRibSeries = seriesUIDs.front() == RibSeriesUID;
+  const int stage = argc > 2 ? std::stoi(argv[2]) : (isRibSeries ? 5 : 4);
+  if (stage == 5 && !isRibSeries)
+  {
+    std::cerr << "Stage 5 requires the bundled LIDC-IDRI CT series.\n";
     return EXIT_FAILURE;
   }
 
@@ -147,10 +214,11 @@ int main(int argc, char* argv[])
   largest->SetAttribute("NumberOfPixels");
 
   const char* stageNames[] = { "0: original (volume rendering)", "1: median filter (volume rendering)",
-    "2: binary threshold (surface)", "3: morphological closing (surface)", "4: largest object (surface)" };
-  if (stage < 0 || stage > 4)
+    "2: binary threshold (surface)", "3: morphological closing (surface)", "4: largest object (surface)",
+    "5: ribs (surface)" };
+  if (stage < 0 || stage > 5)
   {
-    std::cerr << "Stage must be 0..4\n";
+    std::cerr << "Stage must be 0..5\n";
     return EXIT_FAILURE;
   }
 
@@ -162,6 +230,12 @@ int main(int argc, char* argv[])
       CTImage* ct = stage == 0 ? reader->GetOutput() : median->GetOutput();
       ct->Update();
       renderer->AddVolume(MakeVolume(ToVtk(ct)));
+    }
+    else if (stage == 5)
+    {
+      closing->Update();
+      const auto ribs = MakeRibMask(closing->GetOutput());
+      renderer->AddActor(MakeSurface(ToVtk(ribs.GetPointer())));
     }
     else
     {

@@ -3,8 +3,8 @@ chcp 65001 >nul
 setlocal
 
 rem Быстрая сборка и запуск lab_1_itk+vtk (VTK и ITK уже собраны setup_libs.bat).
-rem Запуск: run_lab1.bat [стадия 0..4] [порог_кости_HU]
-rem   run_lab1.bat          стадия 4 (скелет)
+rem Запуск: run_lab1.bat [стадия 0..5] [порог_кости_HU]
+rem   run_lab1.bat          стадия 5 (рёбра)
 rem   run_lab1.bat 0        исходные данные
 rem   run_lab1.bat 2 400    маска кости с порогом 400 HU
 rem Библиотеки ищутся в папке libs рядом с этим файлом, иначе в D:\CompGraph\libs.
