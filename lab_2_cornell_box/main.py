@@ -126,13 +126,11 @@ def render(width, height, samples, seed):
     hit = np.isfinite(t)
     result = np.zeros_like(colors)
 
-    # Обычные (диффузные) точки.
     diffuse_hit = hit & ~mirror
     p = origins[diffuse_hit] + t[diffuse_hit, None] * directions[diffuse_hit]
     illum = shade(p, normals[diffuse_hit], samples, rng)
     result[diffuse_hit] = colors[diffuse_hit] * illum[:, None]
 
-    # Зеркальные точки: отражённый луч -> scene -> shade.
     mirror_hit = hit & mirror
     if mirror_hit.any():
         pm = origins[mirror_hit] + t[mirror_hit, None] * directions[mirror_hit]
@@ -145,11 +143,8 @@ def render(width, height, samples, seed):
         illum2 = shade(p2, n2[hit2], samples, rng)
         refl_color = np.zeros((mirror_hit.sum(), 3))
         refl_color[hit2] = c2[hit2] * illum2[:, None]
-        # Второй уровень отражения не трассируем: если в зеркале снова зеркало,
-        # остаётся тёмный/серый цвет.
         result[mirror_hit] = refl_color * 0.95
 
-    # Светильник.
     lamp = hit & (np.abs(normals[:, 1] + 1) < EPS)
     ceiling_points = origins[lamp] + t[lamp, None] * directions[lamp]
     lamp_indices = np.flatnonzero(lamp)
